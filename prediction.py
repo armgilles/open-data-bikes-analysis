@@ -181,18 +181,18 @@ def prepare_data_for_training(df, date, freq='1H', start=None, periods=1,
     return train_X, train_Y, test_X, test_Y
 
 
-def fit(train_X, train_Y, test_X, test_Y):
+def fit(train_X, train_Y, test_X, test_Y, param):
     """Train the xgboost model
 
     Return the booster trained model
     """
     logger.info("fit")
     # param = {'objective': 'reg:linear'}
-    param = {'objective': 'reg:logistic'}
-    param['eta'] = 0.2
-    param['max_depth'] = 6
-    param['silent'] = 1
-    param['nthread'] = 4
+    # param = {'objective': 'reg:logistic'}
+    # param['eta'] = 0.2
+    # param['max_depth'] = 4 # 6 original
+    # param['silent'] = 1
+    # param['nthread'] = 4
     # used num_class only for classification (e.g. a level of availability)
     # param = {'objective': 'multi:softmax'}
     # param['num_class'] = train_Y.nunique()
