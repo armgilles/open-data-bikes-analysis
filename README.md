@@ -8,7 +8,33 @@ cities).
 Use the Python 3 programming language in Jupyter notebooks and the following
 libraries: pandas, numpy, seaborn, matplotlib, scikit-learn, xgboost.
 
-See the [requirements.txt](./requirements.txt) file for the dependencies.
+## Environment & library
+
+We use conda environment.
+
+For OSX users
+
+```
+conda env create -f environment_osx.yml
+```
+
+For Linux users
+
+```
+conda env create -f environment_linux.yml
+```
+
+To activate environment 
+
+```
+source activate python3DS
+```
+
+To desacticate environment
+
+```
+source deactivate python3DS
+```
 
 ## Clustering
 
