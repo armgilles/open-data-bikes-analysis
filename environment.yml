@@ -96,16 +96,37 @@ dependencies:
 - zlib=1.2.8=3
 - pip:
   - branca==0.2.0
+  - cloudpickle==0.5.1
+  - cython==0.27.2
   - daiquiri==1.3.0
+  - dask==0.15.2
+  - daterangestr==0.0.3
+  - distributed==1.18.3
+  - ephem==3.7.6.0
   - folium==0.5.0
+  - future==0.16.0
   - fuzzywuzzy==0.15.1
+  - heapdict==1.0.0
+  - ipaddress==1.0.18
   - ipython-genutils==0.2.0
   - jupyter-client==5.1.0
   - jupyter-core==4.3.0
   - line-profiler==2.0
+  - lunardate==0.1.5
+  - msgpack-python==0.4.8
+  - openweather==0.11
   - prompt-toolkit==1.0.14
+  - pycalverter==1.6.1
   - python-levenshtein==0.12.0
   - rope-py3k==0.9.4.post1
+  - sortedcontainers==1.5.7
+  - tblib==1.3.2
+  - toolz==0.8.2
+  - tqdm==4.19.4
+  - tsfresh==0.11.0
+  - tslearn==0.1.6
   - watermark==1.5.0
+  - workalendar==2.3.1
+  - zict==0.1.3
 prefix: /Users/babou/anaconda/envs/python3DS
 

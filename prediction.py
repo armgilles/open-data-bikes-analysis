@@ -71,7 +71,7 @@ def complete_data(df):
 def cleanup(df):
     """Clean up
 
-    - keep OPEN station
+    - #keep OPEN station
     - drop duplicates
     - rename some columns
     - drop some columns
@@ -167,10 +167,11 @@ def prepare_data_for_training(df, date, freq='1H', start=None, periods=1,
     Returns 4 DataFrames: two for training, two for testing
     """
     logger.info("prepare data for training")
+    logger.info("New version !")
     logger.info("Get summer holiday features")
     df = get_summer_holiday(df)
-    logger.info("Get public holiday features")
-    df = get_public_holiday(df, count_day=5)
+#    logger.info("Get public holiday features")
+#    df = get_public_holiday(df, count_day=5)
     logger.info("Get cluster station features")
     df = cluster_station_lyon(df)
     logger.info("Get Geo cluster station features")
@@ -207,14 +208,22 @@ def prepare_data_for_training(df, date, freq='1H', start=None, periods=1,
     result = get_station_recently_closed(result, nb_hours=4)
     logger.info("Create ratio bike filling on geo cluster station on time")
     result= filling_bike_on_geo_cluster(result, features_name='bikes_shift_'+str(freq)+'min')
-    logger.info("Create  Approximation (PAA) transformation")
-    result = get_paa_transformation(result, features_to_compute='probability', segments=10)
-    logger.info("Create  Approximation (SAX) transformation")
-    result = get_sax_transformation(result, features_to_compute='probability', segments=10, symbols=8)
+#    logger.info("Create  Approximation (PAA) transformation") # Data Leak
+#    result = get_paa_transformation(result, features_to_compute='probability', segments=10)
+#    logger.info("Create  Approximation (SAX) transformation") # Data Leak
+#    result = get_sax_transformation(result, features_to_compute='probability', segments=10, symbols=8)
+    #logger.info("Create mean transformation") # Data Leak
+#    result = create_rolling_mean_features(result, 
+#                                          features_name='mean_6', 
+#                                          feature_to_mean='probability', 
+#                                          features_grp='station', 
+#                                          nb_shift=6)
+#    
     # logger.info("Create Bin hours of the day")
     # result['hours_binned'] = result.hour.apply(mapping_hours)
-    logger.info("Create interaction features with 'paa' and 'sax' ")
-    result = interaction_features('paa', 'sax', result)
+    
+    #logger.info("Create interaction features with 'paa' and 'sax' ")
+    #result = interaction_features('paa', 'sax', result)
 
     cut = date - pd.Timedelta(freq.replace('T', 'm'))
     stop = date + periods * pd.Timedelta(freq.replace('T', 'm'))
@@ -382,7 +391,7 @@ def get_weather(df, how='learning', freq=None):
         lyon_forecast['weather_desc'] = LE.transform(lyon_forecast['weather_desc'])
 
         #Merging
-        # We talk the last forecast (on freq) using backward merging
+        # We take the last forecast (on freq) using backward merging
         df = df.sort_values('ts')
         df_index_save = df.index # Savind index merge will destroy it
         df = pd.merge_asof(left=df, right=lyon_forecast[['ts','temp', 'humidity', 'weather_desc']], on='ts', direction='backward')
@@ -420,7 +429,7 @@ def get_summer_holiday(df):
 
 def get_public_holiday(df, count_day=None):
     """
-    Create bool for public holiday
+    Calcul delta with the closest holiday (count_day before and after) on absolute
     """
     df['date'] = df.ts.dt.date
     df['date'] = df['date'].astype('str')
@@ -522,6 +531,24 @@ def get_paa_transformation(df, features_to_compute='probability', segments=10):
             
     df['paa'] = paa_list_result
     df['paa'] = df['paa'].astype('float')
+    df = df.sort_values(['ts', 'station']) 
+    df = df.set_index('ts')
+    return df
+
+def create_rolling_mean_features(df, features_name, feature_to_mean, features_grp, nb_shift):
+    """
+    function to create a rolling mean on "feature_to_mean" called "features_name" 
+    groupby "features_grp" on "nb_shift" value
+    Have to sort dataframe and re sort at the end
+    """
+    
+    df['ts'] = df.index
+    df = df.sort_values(['station', 'ts'])
+
+
+    # Create shift features
+    df[features_name] = df.groupby(features_grp)[feature_to_mean].apply(lambda x: x.rolling(window=nb_shift, min_periods=1).mean())
+
     df = df.sort_values(['ts', 'station']) 
     df = df.set_index('ts')
     return df
