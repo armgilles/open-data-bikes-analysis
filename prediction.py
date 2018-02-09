@@ -167,11 +167,11 @@ def prepare_data_for_training(df, date, freq='1H', start=None, periods=1,
     Returns 4 DataFrames: two for training, two for testing
     """
     logger.info("prepare data for training")
-    logger.info("New version !")
+    logger.info("New version 4")
     logger.info("Get summer holiday features")
     df = get_summer_holiday(df)
-#    logger.info("Get public holiday features")
-#    df = get_public_holiday(df, count_day=5)
+    logger.info("Get public holiday features")
+    df = get_public_holiday(df, count_day=5)
     logger.info("Get cluster station features")
     df = cluster_station_lyon(df)
     logger.info("Get Geo cluster station features")
