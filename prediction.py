@@ -167,19 +167,21 @@ def prepare_data_for_training(df, date, freq='1H', start=None, periods=1,
     Returns 4 DataFrames: two for training, two for testing
     """
     logger.info("prepare data for training")
-    logger.info("New version !")
+    logger.info("New version 9")
     logger.info("Get summer holiday features")
     df = get_summer_holiday(df)
-#    logger.info("Get public holiday features")
-#    df = get_public_holiday(df, count_day=5)
+    logger.info("Get public holiday features")
+    df = get_public_holiday(df, count_day=5)
     logger.info("Get cluster station features")
     df = cluster_station_lyon(df)
     logger.info("Get Geo cluster station features")
     df = cluster_station_geo_lyon(df)
-    # logger.info("Get ratio station open by time")
-    # df = get_statio_ratio_open_by_time(df)
+    logger.info("Get ratio station open by time")
+    df = get_statio_ratio_open_by_time(df)
     logger.info("Get ratio station geo cluster open by time")
     df = get_statio_cluster_geo_ratio_open_by_time(df)
+    logger.info("Create Bin hours of the day")
+    df['hours_binned'] = df.hour.apply(mapping_hours)
     logger.info("sort values (station, ts)")
     data = df.sort_values(['station', 'ts']).set_index(["ts", "station"])
     logger.info("compute the future availability at '%s'", freq)
@@ -200,31 +202,47 @@ def prepare_data_for_training(df, date, freq='1H', start=None, periods=1,
         result = result[result.index >= start]
 
     logger.info("Create shift features")
-    result = create_shift_features(result, features_name='bikes_shift_'+str(freq)+'min', feature_to_shift='bikes', 
+    result = create_shift_features(result, features_name='bikes_shift_'+str(freq.replace('H', 'bin')), feature_to_shift='bikes', 
                                 features_grp='station', nb_shift=periods)
     logger.info("Create cumulative trending features")
-    result = create_cumul_trend_features(result, features_name='bikes_shift_'+str(freq)+'min')
+    result = create_cumul_trend_features(result, features_name='bikes_shift_'+str(freq.replace('H', 'bin')))
     logger.info("Create recenlty open station indicator")
     result = get_station_recently_closed(result, nb_hours=4)
     logger.info("Create ratio bike filling on geo cluster station on time")
-    result= filling_bike_on_geo_cluster(result, features_name='bikes_shift_'+str(freq)+'min')
+    result= filling_bike_on_geo_cluster(result, features_name='bikes_shift_'+str(freq.replace('H', 'bin')))
 #    logger.info("Create  Approximation (PAA) transformation") # Data Leak
 #    result = get_paa_transformation(result, features_to_compute='probability', segments=10)
 #    logger.info("Create  Approximation (SAX) transformation") # Data Leak
 #    result = get_sax_transformation(result, features_to_compute='probability', segments=10, symbols=8)
-    #logger.info("Create mean transformation") # Data Leak
-#    result = create_rolling_mean_features(result, 
-#                                          features_name='mean_6', 
-#                                          feature_to_mean='probability', 
-#                                          features_grp='station', 
-#                                          nb_shift=6)
-#    
-    # logger.info("Create Bin hours of the day")
-    # result['hours_binned'] = result.hour.apply(mapping_hours)
+    logger.info("Create mean transformation")
+    result = create_rolling_mean_features(result, 
+                                         features_name='mean_6', 
+                                         feature_to_mean='probability', 
+                                         features_grp='station', 
+                                         nb_shift=6)
+    logger.info("Create std transformation")
+    result = create_rolling_std_features(result, 
+                                         features_name='std_9', 
+                                         feature_to_std='probability', 
+                                         features_grp='station', 
+                                         nb_shift=9)
+    logger.info("Create median transformation")
+    result = create_rolling_median_features(result, 
+                                             features_name='median_6', 
+                                             feature_to_median='probability', 
+                                             features_grp='station', 
+                                             nb_shift=6)
+    logger.info("Create interaction features with 'mean_6' and 'median_6' ")
+    result = interaction_features('mean_6', 'median_6', result)
+    logger.info("create bool empty full station ")
+    result = create_bool_empty_full_station(result)
+    logger.info("Create sum transformation on empty full station")
+    result = create_rolling_sum_features(result, 
+                                            features_name='rolling_sum_9_empty_full_station', 
+                                            feature_to_sum='warning_empty_full', 
+                                            features_grp='station', 
+                                            nb_shift=9)
     
-    #logger.info("Create interaction features with 'paa' and 'sax' ")
-    #result = interaction_features('paa', 'sax', result)
-
     cut = date - pd.Timedelta(freq.replace('T', 'm'))
     stop = date + periods * pd.Timedelta(freq.replace('T', 'm'))
     logger.info("cut date %s", cut)
@@ -233,13 +251,26 @@ def prepare_data_for_training(df, date, freq='1H', start=None, periods=1,
     train = result[result.index <= cut].copy()
     if how == 'train_test_split':
         logger.info("split train and test according to a prediction date")
-        train_X = train.drop([observation, "future"], axis=1)
+        #train_X = train.drop([observation, "future"], axis=1) OLD keep probability
+        train_X = train.drop("future", axis=1)
         train_Y = train['future'].copy()
         # time window
         mask = np.logical_and(result.index >= date, result.index <= stop)
         test = result[mask].copy()
-        test_X = test.drop([observation, "future"], axis=1)
+        #test_X = test.drop([observation, "future"], axis=1) OLD keep probability
+        test_X = test.drop("future", axis=1)
         test_Y = test['future'].copy()
+
+        # Features creation 
+        logger.info("Create mean by station / day / hours_binned")
+        train_X, test_X = create_mean_by_sta_day_binned_hours(train_X, test_X,
+                                                 features_name='proba_mean_by_sta_day_binned_hour', 
+                                                 feature_to_mean='probability', 
+                                                 features_grp=['station', 'day', 'hours_binned'])
+        # logger.info("Create minus_create_mean_by_sta_day_binned_hours_proba")
+        # train_X['minus_create_mean_by_sta_day_binned_hours_proba'] = train_X['proba_mean_by_sta_day_binned_hour'] - train_X['probability']
+        # test_X['minus_create_mean_by_sta_day_binned_hours_proba'] = test_X['proba_mean_by_sta_day_binned_hour'] - test_X['probability']
+
         return train_X, train_Y, test_X, test_Y
     elif how is None:
         logger.info("Split X and y DataFrame")
@@ -371,7 +402,7 @@ def get_weather(df, how='learning', freq=None):
 
         # Resemple data on 10
         clean_lyon_meteo = lyon_meteo.resample("10T", on="ts").mean().bfill().reset_index()
-        df = df.merge(clean_lyon_meteo[['ts', 'temp', 'humidity', 'weather_desc']], on='ts', how='left')
+        df = df.merge(clean_lyon_meteo[['ts', 'temp', 'humidity', 'weather_desc', 'cloudiness']], on='ts', how='left')
         
         df = df.sort_index()
         df = df.set_index('ts')
@@ -394,7 +425,7 @@ def get_weather(df, how='learning', freq=None):
         # We take the last forecast (on freq) using backward merging
         df = df.sort_values('ts')
         df_index_save = df.index # Savind index merge will destroy it
-        df = pd.merge_asof(left=df, right=lyon_forecast[['ts','temp', 'humidity', 'weather_desc']], on='ts', direction='backward')
+        df = pd.merge_asof(left=df, right=lyon_forecast[['ts','temp', 'humidity', 'weather_desc', 'cloudiness']], on='ts', direction='backward')
         df.index = df_index_save
 
         # Resorting as originaly (to don't loose y_test order)
@@ -546,26 +577,122 @@ def create_rolling_mean_features(df, features_name, feature_to_mean, features_gr
     df = df.sort_values(['station', 'ts'])
 
 
-    # Create shift features
+    # Create rolling features
     df[features_name] = df.groupby(features_grp)[feature_to_mean].apply(lambda x: x.rolling(window=nb_shift, min_periods=1).mean())
 
     df = df.sort_values(['ts', 'station']) 
     df = df.set_index('ts')
     return df
 
-def cluster_station_geo_lyon(df):
+def create_rolling_std_features(df, features_name, feature_to_std, features_grp, nb_shift):
+    """
+    function to create a rolling std on "feature_to_std" called "features_name" 
+    groupby "features_grp" on "nb_shift" value
+    Have to sort dataframe and re sort at the end
+    """
+    
+    df['ts'] = df.index
+    df = df.sort_values(['station', 'ts'])
+
+
+    # Create rolling features
+    df[features_name] = df.groupby(features_grp)[feature_to_std].apply(lambda x: x.rolling(window=nb_shift, min_periods=1).std())
+
+    df = df.sort_values(['ts', 'station']) 
+    df = df.set_index('ts')
+    return df
+
+def create_rolling_median_features(df, features_name, feature_to_median, features_grp, nb_shift):
+    """
+    function to create a rolling median on "feature_to_median" called "features_name" 
+    groupby "features_grp" on "nb_shift" value
+    Have to sort dataframe and re sort at the end
+    """
+    
+    df['ts'] = df.index
+    df = df.sort_values(['station', 'ts'])
+
+
+    # Create rolling features
+    df[features_name] = df.groupby(features_grp)[feature_to_median].apply(lambda x: x.rolling(window=nb_shift, min_periods=1).median())
+
+    df = df.sort_values(['ts', 'station']) 
+    df = df.set_index('ts')
+    return df
+
+def create_rolling_sum_features(df, features_name, feature_to_sum, features_grp, nb_shift):
+    """
+    function to create a rolling sum on "feature_to_sum" called "features_name" 
+    groupby "features_grp" on "nb_shift" value
+    Have to sort dataframe and re sort at the end
+    """
+    
+    df['ts'] = df.index
+    df = df.sort_values(['station', 'ts'])
+
+
+    # Create rolling features
+    df[features_name] = df.groupby(features_grp)[feature_to_sum].apply(lambda x: x.rolling(window=nb_shift, min_periods=1).sum())
+
+    df = df.sort_values(['ts', 'station']) 
+    df = df.set_index('ts')
+    return df
+
+def create_mean_by_sta_day_binned_hours(train, test, features_name, feature_to_mean, features_grp):
+    """
+    function to create a mean on feature_to_mean groupby "features_grp"
+    Have to cacul feature_to_mean on train (if not data leak here)
+    Have to sort dataframe and re sort at the end
+    """
+    
+    # Reset Index
+    train['ts'] = train.index
+    test['ts'] = test.index
+    
+    # Create agg on features_grp
+    grp_df = pd.DataFrame(train[train.is_open == 1].groupby(features_grp, as_index=False)[feature_to_mean].mean())
+    # Renaming feature
+    grp_df.rename(columns={feature_to_mean : features_name}, inplace=True)
+    
+    # Merging
+    train = train.merge(grp_df, on=features_grp, how='left')
+    test = test.merge(grp_df, on=features_grp, how='left')
+    
+    train = train.sort_values(['ts', 'station']) 
+    train = train.set_index('ts')
+    
+    test = test.sort_values(['ts', 'station']) 
+    test = test.set_index('ts')
+    return train, test
+
+def create_bool_empty_full_station(df):
+    """
+    Create a bool features "warning_empty_full"
+    If bike <= 2 --> 1
+    If Proba >= 0.875 --> 1
+    else --> 0
+    """
+    
+    df['warning_empty_full'] = 0
+    df.loc[df['bikes'] <= 2, 'warning_empty_full'] = 1
+    df.loc[df['probability'] >= 0.875, 'warning_empty_full'] = 1
+    
+    return df
+
+def cluster_station_geo_lyon(df, path_file='data/station_cluster_geo_armand.csv'):
     """
     Get Lyon station's cluster (from notebook)
     """
-    cluster_lyon_geo = pd.read_csv('data/station_cluster_geo_armand.csv')
+
+    cluster_lyon_geo = pd.read_csv(path_file)
     df = df.merge(cluster_lyon_geo, on='station', how='inner')
     return df
 
-def cluster_station_lyon(df):
+def cluster_station_lyon(df, path_file='data/cluster_lyon_armand.csv'):
     """
     Get Lyon station's cluster (from notebook)
     """
-    cluster_lyon = pd.read_csv('data/cluster_lyon_armand.csv')
+    cluster_lyon = pd.read_csv(path_file)
     df = df.merge(cluster_lyon, on='station', how='inner')
     return df
 
@@ -641,7 +768,7 @@ def filling_bike_on_geo_cluster(df, features_name):
     Merge the result with the DataFrame
     """
 
-    df['ts'] = df.index
+    df = df.reset_index()
     # Total stand for station
     df['total_stand'] = df['bikes'] + df['stands']
 
@@ -649,12 +776,12 @@ def filling_bike_on_geo_cluster(df, features_name):
     total_stand_by_geo_cluster = df.groupby(['ts', 'station_cluster_geo'], as_index=False)['total_stand'].sum()
     total_stand_by_geo_cluster.rename(columns={'total_stand':'total_stand_geo_cluster'}, inplace=True)
 
-    # Total bike by time and gro cluster (taking the shift features bike)
-    features_shift_by_geo_cluster = df.groupby(['ts', 'station_cluster_geo'], as_index=False)[features_name].sum()
-    features_shift_by_geo_cluster.rename(columns={features_name:features_name+'_geo_cluster'}, inplace=True)
+    # Total bike by time and geo cluster on features_name
+    features_by_geo_cluster = df.groupby(['ts', 'station_cluster_geo'], as_index=False)[features_name].sum()
+    features_by_geo_cluster.rename(columns={features_name:features_name+'_geo_cluster'}, inplace=True)
 
     # Merging this 2 DataFrame
-    grp_features_geo_cluster = total_stand_by_geo_cluster.merge(features_shift_by_geo_cluster, 
+    grp_features_geo_cluster = total_stand_by_geo_cluster.merge(features_by_geo_cluster, 
                                                                 on=['ts', 'station_cluster_geo'], 
                                                                 how='inner')
 
